@@ -14,21 +14,17 @@ android {
 	defaultConfig {
 		applicationId "bin.mt.termex"
 		minSdkVersion 21
-		targetSdkVersion 35
+		targetSdkVersion 28
 		versionCode 3007
 		versionName "v3.7"
 	}
 	
-	// ecj模式(设置 -> 实验室 -> ecj)设置Java语法版本
 	compileOptions {
-		// AIDE+最高支持23，gradle 8.5仅到17
 		sourceCompatibility JavaVersion.VERSION_17
 		targetCompatibility JavaVersion.VERSION_17
 	}
 	
-	// 签名文件配置
 	signingConfigs{
-		// release自行配置
 		release{
 			keyAlias "AIDE+"
 			keyPassword "123789456"
@@ -63,12 +59,6 @@ android {
 
 dependencies {
 	implementation fileTree(dir: 'libs', include: ['*.jar'])
-	
-	// 用于放置打包jar根目录classes{N}.dex文件
-	// 也支持资源文件
-	// 注意 gradle不支持打包classes{N}.dex
 	runtimeOnly fileTree(dir: 'runtime', include: ['*.jar'])
-	// 仅编译 与 gradle一致
 	compileOnly fileTree(dir: 'provider', include: ['.jar'])
-	
 }
