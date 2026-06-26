@@ -2,14 +2,29 @@
 
 lib_dir=`dirname "$0"`
 
-# echo "\$HOME -> $HOME"
+# ============================================
+# MTermEx - 社区维护版
+# 适配: bin.mt.termex (非 com.termux)
+# ============================================
 
-# termux环境根目录
-termux_dir=$HOME/termux
+# 动态检测应用数据目录 (兼容多用户)
+# MTermEx 的包名是 bin.mt.termex
+MT_APP_DIR="/data/data/bin.mt.termex"
+MT_USER_DIR="/data/user/0/bin.mt.termex"
+
+# 兼容性检测: 如果 /data/data 路径不存在, 用 /data/user/0
+if [ -d "$MT_APP_DIR" ]; then
+	APP_BASE="$MT_APP_DIR"
+else
+	APP_BASE="$MT_USER_DIR"
+fi
+
+# termux环境根目录 (放在应用数据目录下)
+termux_dir=$APP_BASE/files/termux
 
 if [ ! -e "$termux_dir" ]; then
-	#解压
-	$lib_dir/busybox tar -xzvf $lib_dir/libtermux.so -C $HOME
+	# 解压 termux rootfs
+	$lib_dir/busybox tar -xzvf $lib_dir/libtermux.so -C $APP_BASE/files
 	chmod -R 777 $termux_dir
 fi
 
@@ -17,42 +32,70 @@ fi
 export PROOT_LOADER=$lib_dir/libLoader.so
 
 BASEDIR=$termux_dir
-# 设置 缓存区
+# 设置缓存区
 export PROOT_TMP_DIR=$BASEDIR/cache
 
 ld_config_txt=$PROOT_TMP_DIR/ld.config.txt
 
 if [ ! -e "$ld_config_txt" ]; then
-  cp /linkerconfig/ld.config.txt $ld_config_txt
+  cp /linkerconfig/ld.config.txt $ld_config_txt 2>/dev/null
+  # Android 10 以下可能没有 /linkerconfig
+  if [ ! -e "$ld_config_txt" ]; then
+    mkdir -p $PROOT_TMP_DIR
+    echo "# fallback linker config" > $ld_config_txt
+  fi
 fi
 
-export PATH=/data/data/com.termux/files/usr/bin
-export SHELL=/data/data/com.termux/files/usr/bin/bash
-export PREFIX=/data/data/com.termux/files/usr
+# ============================================
+# 核心: 所有路径都指向 bin.mt.termex
+# ============================================
+export TERMUX_FILES=$APP_BASE/files
+export TERMUX_USR=$TERMUX_FILES/termux/usr
+
+export PATH=$TERMUX_USR/bin
+export SHELL=$TERMUX_USR/bin/bash
+export PREFIX=$TERMUX_USR
 export TERMUX_IS_DEBUGGABLE_BUILD=1
 export TERMUX_MAIN_PACKAGE_FORMAT=debian
-export TERMUX__HOME=/data/data/com.termux/files/home
-export TERMUX_VERSION=0.118.2
-export TERMUX__PREFIX=/data/data/com.termux/files/usr
-export TERMUX_APP__BUILD_DATA_DIR=/data/data/com.termux
-export TERMUX_APP__LEGACY_DATA_DIR=/data/data/com.termux
-export TERMUX__ROOTFS=/data/data/com.termux/files
+export TERMUX__HOME=$TERMUX_FILES/home
+export TERMUX_VERSION=0.143.0
+export TERMUX__PREFIX=$TERMUX_USR
+export TERMUX_APP__BUILD_DATA_DIR=$APP_BASE
+export TERMUX_APP__LEGACY_DATA_DIR=$APP_BASE
+export TERMUX__ROOTFS=$TERMUX_FILES
 
-export HOME=/data/data/com.termux/files/home
+export HOME=$TERMUX_FILES/home
 export TERMUX_APK_RELEASE=UNKNOWN
-export TMPDIR=/data/data/com.termux/files/usr/tmp
+export TMPDIR=$TERMUX_USR/tmp
 
-export PATH=/data/data/com.termux/files/usr/bin
-export TERMUX_APP__DATA_DIR=/data/user/0/com.termux
-export _=/data/data/com.termux/files/usr/bin/env
-# export LD_PRELOAD=$BASEDIR/files/usr/lib/libtermux-exec-ld-preload.so
+export TERMUX_APP__DATA_DIR=$APP_BASE
+export _=$TERMUX_USR/bin/env
 
 unset LD_LIBRARY_PATH
 unset LD_PRELOAD
+
+# ============================================
+# su 兼容: 支持 Magisk / KernelSU / AOSP su
+# ============================================
+su_path=""
+for candidate in /system/bin/su /system/xbin/su /sbin/su /data/adb/ksu/bin/su; do
+	if [ -x "$candidate" ]; then
+		su_path="$candidate"
+		break
+	fi
+done
+
+# 如果找到 su, 导出到 PATH 中方便使用
+if [ -n "$su_path" ]; then
+	export SU_PATH="$su_path"
+fi
 
 $lib_dir/libproot.so \
 			--rootfs=/ \
 			--link2symlink \
 			--bind=$PROOT_TMP_DIR:/linkerconfig \
-			--bind=$BASEDIR:/data/data/com.termux \
+			--bind=$BASEDIR:$TERMUX_FILES \
+			--bind=/dev:/dev \
+			--bind=/proc:/proc \
+			--bind=/sys:/sys \
 			$TERMUX__ROOTFS/usr/bin/login "$@"
